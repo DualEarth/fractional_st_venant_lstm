@@ -1,10 +1,12 @@
+import os
+import glob
+import numpy as np
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
+from sklearn.metrics import mean_squared_error
 
 def process_model_data(config, df, model_predictions):
-
     # Combine predictions from all ensemble members into plot_df and add target columns
     prediction_dates = df['date'].iloc[config['sequence_length']:].reset_index(drop=True)
     plot_df = pd.DataFrame({'date': prediction_dates})
@@ -21,9 +23,22 @@ def process_model_data(config, df, model_predictions):
     # Set date as the index
     plot_df.set_index('date', inplace=True)
 
-    export_df = plot_df.loc[:,['pred_stage', 'pred_discharge']]
-    export_df.to_csv("lstm_x_extra.csv")
+    # Calculate total training days across all periods in `train_dates`
+    total_days = 0
+    for period in config['train_dates']:
+        start_date = datetime.strptime(period['start'], '%Y-%m-%d')
+        end_date = datetime.strptime(period['end'], '%Y-%m-%d')
+        total_days += (end_date - start_date).days + 1  # +1 to include both start and end dates
 
+    # Construct the filename using the model name and total training days
+    model_name = config['model_name']
+    file_name = f"./output/{model_name}_training_{total_days}_days.csv"
+
+    # Export the DataFrame
+    export_df = plot_df.loc[:, ['pred_stage', 'pred_discharge']]
+    export_df.to_csv(file_name)
+
+    print(f"Data saved to {file_name}")
     return plot_df
 
 def plot_results(config, df, plot_df, data):
@@ -67,7 +82,7 @@ def plot_results(config, df, plot_df, data):
     plot_df['target_discharge'] = (plot_df['target_discharge'] * target_discharge_std) + target_discharge_mean
 
     # Plotting ensemble member predictions for stage and discharge
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
 
     # --- Stage Plot ---
 
@@ -120,6 +135,60 @@ def plot_results(config, df, plot_df, data):
     ax2.set_ylabel("Discharge", color="darkred")
     ax2.legend(loc="upper left", bbox_to_anchor=(0, 1))
     ax2.set_title("LSTM Model Discharge Predictions with Ensemble Members and Mean")
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_all_results(df):
+    # Path to output files
+    output_dir = "./output/"
+    csv_files = glob.glob(os.path.join(output_dir, "*.csv"))
+
+    # Load plot start and end dates
+    plot_start_date = datetime.strptime("2021-04-01", "%Y-%m-%d")
+    plot_end_date = datetime.strptime("2021-10-01", "%Y-%m-%d")
+
+    # Filter `df` for the target date range
+    df = df.set_index('date')
+    target_discharge = df.loc[plot_start_date:plot_end_date, 'H13_Anxiang-61505900_discharge']
+    
+    # Initialize plot
+    fig, ax = plt.subplots(figsize=(9, 8))
+    colors = plt.cm.viridis(np.linspace(0, 1, len(csv_files)))
+
+    for i, file_path in enumerate(csv_files):
+        # Load each model's prediction
+        model_df = pd.read_csv(file_path, index_col='date', parse_dates=True)
+        
+        # Filter based on the plot range and align with target_discharge
+        model_df = model_df.loc[plot_start_date:plot_end_date]
+        aligned_target_discharge = target_discharge.reindex(model_df.index)
+
+        # Ensure lengths match by dropping NaNs in both series
+        aligned_target_discharge = aligned_target_discharge.dropna()
+        aligned_pred_discharge = model_df['pred_discharge'].reindex(aligned_target_discharge.index).dropna()
+
+        # Calculate RMSE
+        rmse_discharge = np.sqrt(mean_squared_error(aligned_target_discharge, aligned_pred_discharge))
+
+        # Extract model name and days from the file name
+        model_name = os.path.basename(file_path).replace(".csv", "")
+        series_label = f"{model_name} (RMSE: {rmse_discharge:.2f})"
+        
+        # Plot discharge predictions
+        ax.plot(aligned_pred_discharge.index, aligned_pred_discharge, label=series_label, color=colors[i], lw=1.5)
+
+    # Plot the target discharge data
+    ax.plot(aligned_target_discharge.index, aligned_target_discharge, label="H13_Anxiang-61505900_discharge", color='black', linestyle="--", lw=2)
+
+    # Set labels and title
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Discharge")
+    ax.set_title("Model Discharge Predictions with RMSE")
+
+    # Place legend below the plot
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=2)
 
     plt.tight_layout()
     plt.show()
