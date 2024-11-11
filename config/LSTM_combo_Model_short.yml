@@ -10,7 +10,7 @@ source_stations:
   - 'H2_Zizhiju-61505300'
   - 'H3_Huiku-61505100'
 dropout_prob: 0.4
-sequence_length: 4
+sequence_length: 8
 num_epochs: 32
 status_interval: 999
 num_ensembles: 32

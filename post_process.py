@@ -140,59 +140,6 @@ def plot_results(config, df, plot_df, data):
     plt.show()
 
 
-# def plot_all_results(df):
-#     # Path to output files
-#     output_dir = "./output/"
-#     csv_files = glob.glob(os.path.join(output_dir, "*.csv"))
-
-#     # Load plot start and end dates
-#     plot_start_date = datetime.strptime("2021-04-01", "%Y-%m-%d")
-#     plot_end_date = datetime.strptime("2021-10-01", "%Y-%m-%d")
-
-#     # Filter `df` for the target date range
-#     df = df.set_index('date')
-#     target_discharge = df.loc[plot_start_date:plot_end_date, 'H13_Anxiang-61505900_discharge']
-    
-#     # Initialize plot
-#     fig, ax = plt.subplots(figsize=(9, 8))
-#     colors = plt.cm.viridis(np.linspace(0, 1, len(csv_files)))
-
-#     for i, file_path in enumerate(csv_files):
-#         # Load each model's prediction
-#         model_df = pd.read_csv(file_path, index_col='date', parse_dates=True)
-        
-#         # Filter based on the plot range and align with target_discharge
-#         model_df = model_df.loc[plot_start_date:plot_end_date]
-#         aligned_target_discharge = target_discharge.reindex(model_df.index)
-
-#         # Ensure lengths match by dropping NaNs in both series
-#         aligned_target_discharge = aligned_target_discharge.dropna()
-#         aligned_pred_discharge = model_df['pred_discharge'].reindex(aligned_target_discharge.index).dropna()
-
-#         # Calculate RMSE
-#         rmse_discharge = np.sqrt(mean_squared_error(aligned_target_discharge, aligned_pred_discharge))
-
-#         # Extract model name and days from the file name
-#         model_name = os.path.basename(file_path).replace(".csv", "")
-#         series_label = f"{model_name} (RMSE: {rmse_discharge:.2f})"
-        
-#         # Plot discharge predictions
-#         ax.plot(aligned_pred_discharge.index, aligned_pred_discharge, label=series_label, color=colors[i], lw=1.5)
-
-#     # Plot the target discharge data
-#     ax.plot(aligned_target_discharge.index, aligned_target_discharge, label="H13_Anxiang-61505900_discharge", color='black', linestyle="--", lw=2)
-
-#     # Set labels and title
-#     ax.set_xlabel("Date")
-#     ax.set_ylabel("Discharge")
-#     ax.set_title("Model Discharge Predictions with RMSE")
-
-#     # Place legend below the plot
-#     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=2)
-
-#     plt.tight_layout()
-#     plt.show()
-
 def plot_all_results(df):
     # Path to output files
     output_dir = "./output/"
@@ -254,7 +201,7 @@ def calculate_metrics(df):
     # Filter `df` for the target date range
     df = df.set_index('date')
     target_discharge = df.loc[plot_start_date:plot_end_date, 'H13_Anxiang-61505900_discharge']
-    
+
     # Initialize metrics table
     metrics_data = []
 
@@ -270,11 +217,22 @@ def calculate_metrics(df):
         aligned_target_discharge = aligned_target_discharge.dropna()
         aligned_pred_discharge = model_df['pred_discharge'].reindex(aligned_target_discharge.index).dropna()
 
-        # Calculate metrics
-        rmse = np.sqrt(mean_squared_error(aligned_target_discharge, aligned_pred_discharge))
-        r2 = r2_score(aligned_target_discharge, aligned_pred_discharge)
-        nse = 1 - sum((aligned_target_discharge - aligned_pred_discharge) ** 2) / sum((aligned_target_discharge - np.mean(aligned_target_discharge)) ** 2)
-        kge = 1 - np.sqrt((r2 - 1) ** 2 + (np.std(aligned_pred_discharge) / np.std(aligned_target_discharge) - 1) ** 2 + (np.mean(aligned_pred_discharge) / np.mean(aligned_target_discharge) - 1) ** 2)
+        # Calculate RMSE
+        rmse = np.sqrt(np.mean((aligned_target_discharge - aligned_pred_discharge) ** 2))
+
+        # Calculate R-squared (R2) manually
+        ssr = np.sum((aligned_target_discharge - aligned_pred_discharge) ** 2)  # Sum of squares of residuals
+        sst = np.sum((aligned_target_discharge - np.mean(aligned_target_discharge)) ** 2)  # Total sum of squares
+        r2 = 1 - (ssr / sst) if sst != 0 else float('nan')  # Handling division by zero if variance is zero
+
+        # Calculate NSE (using similar logic)
+        nse = 1 - (ssr / sst)  # The NSE formula is equivalent to R2 when computed over means
+
+        # Calculate KGE (for comparison)
+        cc = np.corrcoef(aligned_target_discharge, aligned_pred_discharge)[0, 1]
+        alpha = np.std(aligned_pred_discharge) / np.std(aligned_target_discharge)
+        beta = np.mean(aligned_pred_discharge) / np.mean(aligned_target_discharge)
+        kge = 1 - np.sqrt((cc - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2)
 
         # Extract model name from the file name
         model_name = os.path.basename(file_path).replace(".csv", "")
