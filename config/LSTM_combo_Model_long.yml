@@ -4,6 +4,8 @@ model_name: 'LSTM_combo_Model'
 train_dates:
   - start: '2021-04-01'
     end: '2021-05-30'
+  - start: '2022-04-01'
+    end: '2022-10-31'
 target_station: 'H13_Anxiang-61505900'
 source_stations:
   - 'H1_Dahukou-61505400'
@@ -12,7 +14,7 @@ source_stations:
 dropout_prob: 0.4
 sequence_length: 5
 num_epochs: 64
-status_interval: 64
+status_interval: 65
 num_ensembles: 16
 batch_size: 8
 learning_rate: 0.01
